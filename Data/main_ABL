@@ -114,6 +114,8 @@ def stack_list_of_raw_arrays(df_list, pad_value=np.nan):
     cycle.
     Raw arrays are the X"""
     list_2d = [calc_param_per_cycle(df) for df in df_list]
+    headers = list(list_2d[0].columns)
+    print("headers:", headers)
     max_cols = max(arr.shape[1] for arr in list_2d)
     pad_list = []
     for arr in list_2d:
@@ -130,6 +132,8 @@ def stack_list_of_aging_arrays(df_list, pad_value=np.nan):
         and	Normalized Discharge Capacity [-]per cycle.
     Aging arrays are the X"""
     list_2d = [transpose_aging_df(df) for df in df_list]
+    headers = list(list_2d[0].columns)
+    print("headers:", headers)
     max_cols = max(arr.shape[1] for arr in list_2d)
     pad_list = []
     for arr in list_2d:
