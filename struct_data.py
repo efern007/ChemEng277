@@ -78,8 +78,8 @@ def compress_raw_data(raw_list):
         raw_init = raw_list[i]
         # only keep rows where State is 'R', 'C', or 'D'
         raw = raw_init[raw_init['State'].isin(['R', 'C', 'D'])].copy()
-        # concatenate "Full Step #" and "Loop3" to create a new column "Full Step #"
-        raw.loc[:, 'Full Step #'] = raw['Full Step #'] + "--" + raw['Loop3'].astype(str)
+        # concatenate "Cyc#", "Full Step #" and "Loop3" to create a new column "Full Step #"
+        raw.loc[:, 'Full Step #'] = raw['Cyc#'].astype(str) + "--" + raw['Full Step #'] + "--" + raw['Loop3'].astype(str)
         # calculate the max Step (hrs) for each Full Step #
         max_step_time = raw.groupby('Full Step #')['Step (Sec)'].max() / 3600
         # calculate the max Normalized Capacity (nominal capacity unit) for each Full Step #
@@ -101,6 +101,7 @@ def compress_raw_data(raw_list):
         df_list.append(df_temp)
     # print the structure of the processed dataframe
     print(df_list[0].head())
+    print(f'Processed Data has {len(df_list[0])} entries.')
     return df_list
 
 def compress_to_cycle(processed_list, aging_list):
@@ -158,6 +159,7 @@ def compress_to_cycle(processed_list, aging_list):
                                 'Max Voltage': max_voltage.values})
         # remove cycle 0 from the processed data
         df_temp1 = df_temp1[df_temp1['Cycle'] != 0]
+        print(df_temp1.head())
         print(f'Processed Data has {len(df_temp1)} entries.')
         print(f'Aging data initially has {len(aging)} entries.')
         # remove rows in the aging data that are not in the processed data
@@ -231,7 +233,7 @@ def main():
     file_prefix_raw = "Publishing_data_raw_data_cell_"
     no_files = 96
     # NOTE: import raw data with first 10,000 rows for testing, run with nrows=None for full data
-    raw_list = import_files(directory_raw, file_prefix_raw, no_files, nrows=10000)
+    raw_list = import_files(directory_raw, file_prefix_raw, no_files, nrows=None)
     # Aging Processing
     directory_aging = "Data/AgingData/"
     file_prefix_aging = "Publishing_data_aging_summary_cell_"
