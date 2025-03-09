@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 import pickle
 
 def files_align(directory1, directory2):
@@ -116,35 +117,71 @@ def compress_to_cycle(processed_list, aging_list):
         # make various calculations on the processed data at each cycle
         # calculate the total time for each cycle
         total_time = processed.groupby('Cycle')['Max Step (hrs)'].sum()
+        # Replace zero or missing values in total_time with a small positive number
+        total_time = total_time.replace(0, np.nan).fillna(1e-10)
         # calculate the rest time 'R' for each cycle
         rest_time = processed[processed['State'] == 'R'].groupby('Cycle')['Max Step (hrs)'].sum()
+        # Ensure all Series have the same index
+        all_cycles = total_time.index
+        rest_time = rest_time.reindex(all_cycles, fill_value=0)
         # calculate the fraction of rest time for each cycle
         rest_fraction = rest_time / total_time
         # calculate the charge time 'C' for each cycle
         charge_time = processed[processed['State'] == 'C'].groupby('Cycle')['Max Step (hrs)'].sum()
+        charge_time = charge_time.reindex(all_cycles, fill_value=0)
         # calculate the fraction of charge time for each cycle
         charge_fraction = charge_time / total_time
         # calculate the discharge time 'D' for each cycle
         discharge_time = processed[processed['State'] == 'D'].groupby('Cycle')['Max Step (hrs)'].sum()
+        discharge_time = discharge_time.reindex(all_cycles, fill_value=0)
         # calculate the fraction of discharge time for each cycle
         discharge_fraction = discharge_time / total_time
         # calculate the total capacity for each cycle
         total_capacity = processed.groupby('Cycle')['Max Capacity'].sum()
+        total_capacity = total_capacity.reindex(all_cycles, fill_value=0)
         # calculate the average current for each cycle
         avg_current = total_capacity / total_time
         # calculate the max voltage for each cycle
         max_voltage = processed.groupby('Cycle')['Max Voltage'].max()
-        # Ensure all Series have the same index
-        all_cycles = total_time.index
-        rest_time = rest_time.reindex(all_cycles, fill_value=0)
-        rest_fraction = rest_fraction.reindex(all_cycles, fill_value=0)
-        charge_time = charge_time.reindex(all_cycles, fill_value=0)
-        charge_fraction = charge_fraction.reindex(all_cycles, fill_value=0)
-        discharge_time = discharge_time.reindex(all_cycles, fill_value=0)
-        discharge_fraction = discharge_fraction.reindex(all_cycles, fill_value=0)
-        total_capacity = total_capacity.reindex(all_cycles, fill_value=0)
-        avg_current = avg_current.reindex(all_cycles, fill_value=0)
         max_voltage = max_voltage.reindex(all_cycles, fill_value=0)
+
+        # create a dataframe to store the processed data
+        # print(f'Index = {i}')
+        # processed = processed_list[i]
+        # aging = aging_list[i]
+        # # make various calculations on the processed data at each cycle
+        # # calculate the total time for each cycle
+        # total_time = processed.groupby('Cycle')['Max Step (hrs)'].sum()
+        # # calculate the rest time 'R' for each cycle
+        # rest_time = processed[processed['State'] == 'R'].groupby('Cycle')['Max Step (hrs)'].sum()
+        # # calculate the fraction of rest time for each cycle
+        # rest_fraction = rest_time / total_time
+        # # calculate the charge time 'C' for each cycle
+        # charge_time = processed[processed['State'] == 'C'].groupby('Cycle')['Max Step (hrs)'].sum()
+        # # calculate the fraction of charge time for each cycle
+        # charge_fraction = charge_time / total_time
+        # # calculate the discharge time 'D' for each cycle
+        # discharge_time = processed[processed['State'] == 'D'].groupby('Cycle')['Max Step (hrs)'].sum()
+        # # calculate the fraction of discharge time for each cycle
+        # discharge_fraction = discharge_time / total_time
+        # # calculate the total capacity for each cycle
+        # total_capacity = processed.groupby('Cycle')['Max Capacity'].sum()
+        # # calculate the average current for each cycle
+        # avg_current = total_capacity / total_time
+        # # calculate the max voltage for each cycle
+        # max_voltage = processed.groupby('Cycle')['Max Voltage'].max()
+        # # Ensure all Series have the same index
+        # all_cycles = total_time.index
+        # rest_time = rest_time.reindex(all_cycles, fill_value=0)
+        # rest_fraction = rest_fraction.reindex(all_cycles, fill_value=0)
+        # charge_time = charge_time.reindex(all_cycles, fill_value=0)
+        # charge_fraction = charge_fraction.reindex(all_cycles, fill_value=0)
+        # discharge_time = discharge_time.reindex(all_cycles, fill_value=0)
+        # discharge_fraction = discharge_fraction.reindex(all_cycles, fill_value=0)
+        # total_capacity = total_capacity.reindex(all_cycles, fill_value=0)
+        # avg_current = avg_current.reindex(all_cycles, fill_value=0)
+        # max_voltage = max_voltage.reindex(all_cycles, fill_value=0)
+
         # create a dataframe to store the processed data
         df_temp1 = pd.DataFrame({'Cycle': total_time.index,
                                 'Total Time (hrs)': total_time.values,
