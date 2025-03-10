@@ -81,14 +81,6 @@ def create_train_val_sets(data, seed=77):
         val_set[key] = data[key]
 
 
-
-    # for key in data.keys():
-    #     # Randomly shuffle the data
-    #     data[key] = data[key].sample(frac=1, random_state=77).reset_index(drop=True)
-    #     # Split the data into train and validation sets
-    #     train_set[key], val_set[key] = train_test_split(data[key], test_size=0.2, random_state=6)
-    
-
     # Determine the maximum number of rows across all DataFrames
     max_rows = max(df.shape[0] for df in data.values())
     
@@ -131,9 +123,9 @@ def create_train_val_sets(data, seed=77):
 
     # Check the values of row 1000 of the average train set and average validation DataFrame
     print("Row 1000 of Average Train Set:")
-    print(avg_train_set.iloc[1000])
+    print(avg_train_set.iloc[999])
     print("Row 1000 of Average Validation Set:")
-    print(avg_val_set.iloc[1000]) 
+    print(avg_val_set.iloc[999]) 
 
     # separate the target variable from the features for each dataset
     # The target will contain Cycle and Normalized Discharge Capacity [-]
@@ -147,15 +139,22 @@ def create_train_val_sets(data, seed=77):
     avg_val_set_y = avg_val_set[["Cycle", "Normalized Discharge Capacity [-]"]]
     avg_val_set_X = avg_val_set.drop(columns=["Normalized Discharge Capacity [-]"])
 
-    return avg_train_set_X, avg_val_set_X, avg_train_set_y, avg_val_set_y
+    # Update headers
+    headers = avg_train_set_X.columns
+
+    return avg_train_set_X, avg_val_set_X, avg_train_set_y, avg_val_set_y, headers
 
 
 
-def create_models(train_set_X, val_set_X, train_set_y, val_set_y):
+def create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers, key):
     """We will test linear regression, ridge regression, and lasso regression models.
     Lasso will be tested for various alpha values [0.1, 0.25, 0.5, 0.75, 0.9]
     Ridge will be tested for various alpha values [1, 2.5, 5, 7.5, 9]
     Create a dictionary to store the R^2 values"""
+    
+    print(f"Creating models for {key} data.")
+    
+    # Scale the data
     scaler = StandardScaler()
     train_set_X = scaler.fit_transform(train_set_X)
     val_set_X = scaler.transform(val_set_X)
@@ -165,6 +164,7 @@ def create_models(train_set_X, val_set_X, train_set_y, val_set_y):
     models = {}
     # Create a dictionary to store the model names
     model_names = {}
+    coefficients_list = []  # List to store coefficients=
     
     for model_name in ["linear", "ridge", "lasso"]:
         r2_values[model_name] = []
@@ -173,23 +173,37 @@ def create_models(train_set_X, val_set_X, train_set_y, val_set_y):
         for alpha in [0.1, 0.25, 0.5, 0.75, 0.9]:
             if model_name == "linear":
                 model = linear_model.LinearRegression()
+                alpha_value = None
             elif model_name == "ridge":
                 model = linear_model.Ridge(alpha=10*alpha, max_iter=10000)
+                alpha_value = 10*alpha
             elif model_name == "lasso":
                 model = linear_model.Lasso(alpha=alpha, max_iter=10000)
+                alpha_value = alpha
             model.fit(train_set_X, train_set_y)
             r2 = model.score(val_set_X, val_set_y)
             r2_values[model_name].append(r2)
             models[model_name].append(model)
             if model_name == "linear":
                 model_names[model_name].append(model_name)
-                print(f"Model: {model_name}, alpha: {alpha}, R^2: {r2}")
+                print(f"Model: {model_name}, R^2: {r2}")
             elif model_name == "ridge":
                 model_names[model_name].append(model_name + f"_{10*alpha}")
                 print(f"Model: {model_name}, alpha: {10*alpha}, R^2: {r2}")
             else:
                 model_names[model_name].append(model_name + f"_{alpha}")
                 print(f"Model: {model_name}, alpha: {alpha}, R^2: {r2}")
+
+            # Store coefficients
+            coef_dict = {
+                "model_name": model_name,
+                "alpha": alpha_value,
+                "R^2": r2
+            }
+            # Use zip to pair feature names with their coefficients
+            coef_dict.update({f: coef for f, coef in zip(headers, model.coef_[1])})
+            print(f'Size of Coefficients structure = {len(model.coef_)}')
+            coefficients_list.append(coef_dict)
 
     # print all dictionaries
     print("R^2 Values:")
@@ -210,7 +224,14 @@ def create_models(train_set_X, val_set_X, train_set_y, val_set_y):
                 best_model = models[model_name][i]
                 best_model_name = model_names[model_name][i]
     print(f"Best Model: {best_model_name}")
-    return best_model, best_model_name, best_r2, scaler
+
+    # Create a DataFrame for the coefficients
+    coefficients_df = pd.DataFrame(coefficients_list)
+    print("Coefficients DataFrame:")
+    print(coefficients_df)
+
+    
+    return best_model, best_model_name, best_r2, scaler, coefficients_df
 
 
 def test_model(best_model, best_model_name, data_real_driving, scaler):
@@ -251,9 +272,12 @@ def main():
     
     for key, data in data_train_val.items():
         # Create train and validation sets
-        train_set_X, val_set_X, train_set_y, val_set_y = create_train_val_sets(data)
+        train_set_X, val_set_X, train_set_y, val_set_y, headers = create_train_val_sets(data)
         # create linear, lasso, and ridge regression models - save R^2 values to a table
-        best_model, best_model_name, best_r2_val, scaler = create_models(train_set_X, val_set_X, train_set_y, val_set_y)
+        best_model, best_model_name, best_r2_val, scaler, coefficients_df = create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers, key)
+        # save the coefficients_df to a csv file to Data/Completed_Analysis
+        coefficients_df.to_csv(f"Data/Completed_Analysis/{key}_coefficients.csv", index=False)
+        # test the best model against the real driving data
         avg_r2_test = test_model(best_model, best_model_name, data_real_driving, scaler)
         chosen_model[key] = best_model, best_model_name, best_r2_val, avg_r2_test
 
