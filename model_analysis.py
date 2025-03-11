@@ -122,10 +122,12 @@ def create_train_val_sets(data, seed=77):
     print(avg_val_set.head())
 
     # Check the values of row 1000 of the average train set and average validation DataFrame
-    print("Row 1000 of Average Train Set:")
-    print(avg_train_set.iloc[999])
-    print("Row 1000 of Average Validation Set:")
-    print(avg_val_set.iloc[999]) 
+    if len(avg_train_set) > 999:
+        print("Row 1000 of Average Train Set:")
+        print(avg_train_set.iloc[999])
+    if len(avg_val_set) > 999:
+        print("Row 1000 of Average Validation Set:")
+        print(avg_val_set.iloc[999]) 
 
     # separate the target variable from the features for each dataset
     # The target will contain Cycle and Normalized Discharge Capacity [-]
@@ -135,18 +137,28 @@ def create_train_val_sets(data, seed=77):
     avg_train_set_y = avg_train_set[["Cycle", "Normalized Discharge Capacity [-]"]]
     avg_train_set_X = avg_train_set.drop(columns=["Normalized Discharge Capacity [-]"])
 
+    # print headers to avg_train set_y
+    print("Average Train Set y: ")
+    print(avg_train_set_y.head())
+
+
     # Avg Validation Set
     avg_val_set_y = avg_val_set[["Cycle", "Normalized Discharge Capacity [-]"]]
     avg_val_set_X = avg_val_set.drop(columns=["Normalized Discharge Capacity [-]"])
 
     # Update headers
-    headers = avg_train_set_X.columns
+    headers_x = avg_train_set_X.columns
+    headers_y = avg_train_set_y.columns
 
-    return avg_train_set_X, avg_val_set_X, avg_train_set_y, avg_val_set_y, headers
+    return avg_train_set_X, avg_val_set_X, avg_train_set_y, avg_val_set_y, headers_x, headers_y
 
+def remove_before_char(s, char):
+    # Split the string at the specified character
+    parts = s.split(char, 1)
+    # Return the part after the character, or the original string if the character is not found
+    return parts[1] if len(parts) > 1 else s
 
-
-def create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers, key):
+def create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers_x, key):
     """We will test linear regression, ridge regression, and lasso regression models.
     Lasso will be tested for various alpha values [0.1, 0.25, 0.5, 0.75, 0.9]
     Ridge will be tested for various alpha values [1, 2.5, 5, 7.5, 9]
@@ -154,10 +166,23 @@ def create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers, key):
     
     print(f"Creating models for {key} data.")
     
-    # Scale the data
+    # Scale the X data
     scaler = StandardScaler()
     train_set_X = scaler.fit_transform(train_set_X)
     val_set_X = scaler.transform(val_set_X)
+
+    # print the the first few rows of the scaled train and validation sets
+    print("Scaled Train Set X:")
+    print(train_set_X[:5])
+    print("Scaled Validation Set X:")
+    print(val_set_X[:5])
+
+
+    # # Scale the y data
+    # target_scaler = StandardScaler()
+    # target_scaler = target_scaler.fit_transform(train_set_y.values.reshape(-1, 1))
+    # val_set_y = target_scaler.transform(val_set_y.values.reshape(-1, 1))
+
 
     r2_values = {}
     # Create a dictionary to store the models
@@ -201,7 +226,7 @@ def create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers, key):
                 "R^2": r2
             }
             # Use zip to pair feature names with their coefficients
-            coef_dict.update({f: coef for f, coef in zip(headers, model.coef_[1])})
+            coef_dict.update({f: coef for f, coef in zip(headers_x, model.coef_[1])})
             print(f'Size of Coefficients structure = {len(model.coef_)}')
             coefficients_list.append(coef_dict)
 
@@ -217,12 +242,15 @@ def create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers, key):
     best_r2 = -np.inf
     best_model = None
     best_model_name = None
+    best_alpha = None
     for model_name in r2_values.keys():
         for i, r2 in enumerate(r2_values[model_name]):
             if r2 > best_r2:
                 best_r2 = r2
                 best_model = models[model_name][i]
                 best_model_name = model_names[model_name][i]
+                best_alpha = remove_before_char(str(model_names[model_name][i]), "_")
+                # 10 * alpha if model_name == "ridge" else alpha
     print(f"Best Model: {best_model_name}")
 
     # Create a DataFrame for the coefficients
@@ -231,10 +259,28 @@ def create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers, key):
     print(coefficients_df)
 
     
-    return best_model, best_model_name, best_r2, scaler, coefficients_df
+    return best_model, best_model_name, best_alpha, best_r2, scaler, coefficients_df
 
+def plot_figures(y_true, y_pred, key, recipe_type):
+    """Plot the predictions against the actual values."""
+    # add headers to the y_pred DataFrame where the first column is "Cycle" and the second column is "Normalized Discharge Capacity [-]"
+    y_pred = pd.DataFrame(y_pred[:,1], columns=["Normalized Discharge Capacity [-]"])
 
-def test_model(best_model, best_model_name, data_real_driving, scaler):
+    plt.figure(figsize=(10, 6))
+    # scatter plot of the true values
+    plt.scatter(y_true["Cycle"], y_true["Normalized Discharge Capacity [-]"], label="True", color="orange")
+    # line plot of the predicted values    
+    plt.plot(y_true["Cycle"], y_pred, label="Predicted", color="blue")
+    plt.xlabel("Cycle")
+    plt.ylabel("Normalized Discharge Capacity [-]")
+    plt.title(f"{recipe_type} Model Predictions vs. True Values for Cell #{int(key) + 89}")
+    plt.legend(["True", "Predicted"])
+    # save the figure to Data/Completed_Analysis
+    plt.savefig(f"Data/Completed_Analysis/{recipe_type}_Model_Predictions_vs_True_Values_Cell_{int(key) + 89}.png")
+    return
+    
+
+def test_model(best_model, best_model_name, data_real_driving, scaler, recipe_type):
     """Test the best model against all real driving data keys (8 in total)."""
     r2_values = {}
     # separate the target variable from the features for the real driving dataset
@@ -251,7 +297,18 @@ def test_model(best_model, best_model_name, data_real_driving, scaler):
         data_real_driving_X[key] = scaler.transform(data_real_driving_X[key])
         r2 = best_model.score(data_real_driving_X[key], data_real_driving_y[key])
         r2_values[key] = r2
-        print(f"Model: {best_model_name}, Key: {key}, R^2: {r2}")
+        # print the R^2 value for each key
+        print(f"Model: {best_model_name}, Cell #: {int(key) + 89}, R^2: {r2}")
+        # make predictions
+        y_pred = best_model.predict(data_real_driving_X[key])
+        # print the first few predictions
+        print("Predictions:")
+        print(y_pred[:5])
+        # print the shape of the predictions
+        print(f"Shape of Predictions: {y_pred.shape}")
+        # plot the predictions against the actual values
+        plot_figures(data_real_driving_y[key], y_pred, key, recipe_type)
+    # print all R^2 values
     print("R^2 Values:")
     print(r2_values)
     avg_r2 = np.mean(list(r2_values.values()))
@@ -272,16 +329,27 @@ def main():
     
     for key, data in data_train_val.items():
         # Create train and validation sets
-        train_set_X, val_set_X, train_set_y, val_set_y, headers = create_train_val_sets(data)
+        train_set_X, val_set_X, train_set_y, val_set_y, headers_x, headers_y = create_train_val_sets(data)
         # create linear, lasso, and ridge regression models - save R^2 values to a table
-        best_model, best_model_name, best_r2_val, scaler, coefficients_df = create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers, key)
+        best_model, best_model_name, best_alpha, best_r2_val, scaler, coefficients_df = create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers_x, key)
         # save the coefficients_df to a csv file to Data/Completed_Analysis
         coefficients_df.to_csv(f"Data/Completed_Analysis/{key}_coefficients.csv", index=False)
         # test the best model against the real driving data
-        avg_r2_test = test_model(best_model, best_model_name, data_real_driving, scaler)
-        chosen_model[key] = best_model, best_model_name, best_r2_val, avg_r2_test
-
-    print(chosen_model)
+        avg_r2_test = test_model(best_model, best_model_name, data_real_driving, scaler, key)
+        chosen_model[key] = {
+            "Model": best_model_name,
+            "Alpha": best_alpha,
+            "R^2 Validation": best_r2_val,
+            "Avg R^2 Real Driving Test Set": avg_r2_test
+        }
+    
+    # turn the chosen_model dictionary into a DataFrame
+    chosen_model_df = pd.DataFrame.from_dict(chosen_model, orient='index').reset_index()
+    chosen_model_df.columns = ["Recipe Type", "Model", "Alpha", "R^2 Validation", "Avg R^2 Real Driving Test Set"]
+    
+    # save the chosen_model DataFrame to a csv file to Data/Completed_Analysis
+    chosen_model_df.to_csv("Data/Completed_Analysis/chosen_model.csv", index=False)
+    print(chosen_model_df)
     return
 
 
