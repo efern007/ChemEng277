@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from sklearn import linear_model
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import RobustScaler
+import seaborn as sns
 
 """As a note for data analysis: all models will be trained and validated individually for each of the three 
 datasets: constant current, periodic, and synthetic. The real driving dataset will be used for testing purposes
@@ -55,6 +57,40 @@ def inspect_all_data(data_constant_current, data_periodic, data_synthetic, data_
     print("Inspecting Real Driving Data:")
     inspect_dictionary(data_real_driving)
     return
+
+# def remove_outliers(data):
+#     """Replace outliers from the data with data that fits the discharge profile. Some of the normalized 
+#     discharge capacities are greater than 2.0. These data should be replaced with a value that is the working 
+#     median of the 10 cycles before and after the cycle in question. In cases where the cycle is within the 
+#     first 10 cycles, the median of the 10 cycles after the cycle in question should be used. In cases where 
+#     the cycle is within the last 10 cycles, the median of the 10 cycles before the cycle in question should 
+#     be used. All other columns will perform the same computation at the identified cycle. In all cases, cycle 
+#     number should remain the same."""
+
+#     new_data = {}
+#     for key in data.keys():
+#         # The target will contain Cycle and Normalized Discharge Capacity [-]
+#         # The features will contain Cycle with all other columns
+#         data_cycle = data[key]["Cycle"]
+#         data_other = data[key].drop(columns=["Cycle"])
+#         for i in range(10, len(data_other) - 10):
+#             if data_other.loc[i, "Normalized Discharge Capacity [-]"] > 2.0:
+#                 # perform the same computation at the identified cycle for all columns
+#                 for col in data_other.columns:
+#                     data_other.loc[i, col] = np.median(data_other.loc[i-10:i+10, col])
+#         for i in range(10):
+#             if data_other.loc[i, "Normalized Discharge Capacity [-]"] > 2.0:
+#                 for col in data_other.columns:
+#                     data_other.loc[i, col] = np.median(data_other.loc[i:i+10, col])
+#         for i in range(len(data_other) - 10, len(data_other)):
+#             if data_other.loc[i, "Normalized Discharge Capacity [-]"] > 2.0:
+#                 for col in data_other.columns:
+#                     data_other.loc[i, col] = np.median(data_other.loc[i-10:i, col])
+#         # add the cycle data back to the DataFrame
+#         new_data[key] = pd.concat([data_cycle, data_other], axis=1)
+        
+#     return new_data
+
 
 def create_train_val_sets(data, seed=77):
     # Save the headers of the DataFrames
@@ -161,35 +197,50 @@ def remove_before_char(s, char):
 def create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers_x, key):
     """We will test linear regression, ridge regression, and lasso regression models.
     Lasso will be tested for various alpha values [0.1, 0.25, 0.5, 0.75, 0.9]
-    Ridge will be tested for various alpha values [1, 2.5, 5, 7.5, 9]
+    Ridge will be tested for various alpha values [10, 25, 50, 75, 90]
     Create a dictionary to store the R^2 values"""
     
     print(f"Creating models for {key} data.")
     
     # Scale the X data
-    scaler = StandardScaler()
+    scaler = RobustScaler()
     train_set_X = scaler.fit_transform(train_set_X)
     val_set_X = scaler.transform(val_set_X)
 
-    # print the the first few rows of the scaled train and validation sets
+    # print the first few rows of the scaled train and validation sets X
     print("Scaled Train Set X:")
     print(train_set_X[:5])
     print("Scaled Validation Set X:")
     print(val_set_X[:5])
 
+    # Check for multicollinearity
+    check_multicollinearity(pd.DataFrame(train_set_X, columns=headers_x))
 
-    # # Scale the y data
-    # target_scaler = StandardScaler()
-    # target_scaler = target_scaler.fit_transform(train_set_y.values.reshape(-1, 1))
-    # val_set_y = target_scaler.transform(val_set_y.values.reshape(-1, 1))
+    # Scale the y data
+    target_scaler = RobustScaler()
+    train_set_y = target_scaler.fit_transform(train_set_y)
+    val_set_y = target_scaler.transform(val_set_y)
 
+    # print the first few rows of the scaled train and validation sets Y
+    print("Scaled Train Set y:")
+    print(train_set_y[:5])
+    print("Scaled Validation Set y:")
+    print(val_set_y[:5])
+
+    # Print shapes of the datasets
+    print(f"Shape of train_set_X: {train_set_X.shape}")
+    print(f"Shape of val_set_X: {val_set_X.shape}")
+    print(f"Shape of train_set_y: {train_set_y.shape}")
+    print(f"Shape of val_set_y: {val_set_y.shape}")
 
     r2_values = {}
     # Create a dictionary to store the models
     models = {}
     # Create a dictionary to store the model names
     model_names = {}
-    coefficients_list = []  # List to store coefficients=
+    coefficients_list = []  # List to store coefficients
+
+    MULTIPLIER = 100
     
     for model_name in ["linear", "ridge", "lasso"]:
         r2_values[model_name] = []
@@ -200,8 +251,8 @@ def create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers_x, key
                 model = linear_model.LinearRegression()
                 alpha_value = None
             elif model_name == "ridge":
-                model = linear_model.Ridge(alpha=10*alpha, max_iter=10000)
-                alpha_value = 10*alpha
+                model = linear_model.Ridge(alpha=MULTIPLIER*alpha, max_iter=10000)
+                alpha_value = MULTIPLIER*alpha
             elif model_name == "lasso":
                 model = linear_model.Lasso(alpha=alpha, max_iter=10000)
                 alpha_value = alpha
@@ -213,8 +264,8 @@ def create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers_x, key
                 model_names[model_name].append(model_name)
                 print(f"Model: {model_name}, R^2: {r2}")
             elif model_name == "ridge":
-                model_names[model_name].append(model_name + f"_{10*alpha}")
-                print(f"Model: {model_name}, alpha: {10*alpha}, R^2: {r2}")
+                model_names[model_name].append(model_name + f"_{MULTIPLIER*alpha}")
+                print(f"Model: {model_name}, alpha: {MULTIPLIER*alpha}, R^2: {r2}")
             else:
                 model_names[model_name].append(model_name + f"_{alpha}")
                 print(f"Model: {model_name}, alpha: {alpha}, R^2: {r2}")
@@ -226,7 +277,7 @@ def create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers_x, key
                 "R^2": r2
             }
             # Use zip to pair feature names with their coefficients
-            coef_dict.update({f: coef for f, coef in zip(headers_x, model.coef_[1])})
+            coef_dict.update({f: coef for f, coef in zip(headers_x, model.coef_.flatten())})
             print(f'Size of Coefficients structure = {len(model.coef_)}')
             coefficients_list.append(coef_dict)
 
@@ -258,13 +309,17 @@ def create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers_x, key
     print("Coefficients DataFrame:")
     print(coefficients_df)
 
-    
-    return best_model, best_model_name, best_alpha, best_r2, scaler, coefficients_df
+    return best_model, best_model_name, best_alpha, best_r2, scaler, target_scaler, coefficients_df
 
-def plot_figures(y_true, y_pred, key, recipe_type):
+def plot_figures(y_true, y_pred, key, recipe_type, target_scaler):
     """Plot the predictions against the actual values."""
+    # Inverse transform the target variable
+    y_true = target_scaler.inverse_transform(y_true)
+    y_pred = target_scaler.inverse_transform(y_pred)
+    
     # add headers to the y_pred DataFrame where the first column is "Cycle" and the second column is "Normalized Discharge Capacity [-]"
     y_pred = pd.DataFrame(y_pred[:,1], columns=["Normalized Discharge Capacity [-]"])
+    y_true = pd.DataFrame(y_true, columns=["Cycle", "Normalized Discharge Capacity [-]"])
 
     plt.figure(figsize=(10, 6))
     # scatter plot of the true values
@@ -277,10 +332,10 @@ def plot_figures(y_true, y_pred, key, recipe_type):
     plt.legend(["True", "Predicted"])
     # save the figure to Data/Completed_Analysis
     plt.savefig(f"Data/Completed_Analysis/{recipe_type}_Model_Predictions_vs_True_Values_Cell_{int(key) + 89}.png")
+    plt.close()  # Close the figure to free up memory
     return
-    
 
-def test_model(best_model, best_model_name, data_real_driving, scaler, recipe_type):
+def test_model(best_model, best_model_name, data_real_driving, scaler, target_scaler, recipe_type):
     """Test the best model against all real driving data keys (8 in total)."""
     r2_values = {}
     # separate the target variable from the features for the real driving dataset
@@ -295,6 +350,8 @@ def test_model(best_model, best_model_name, data_real_driving, scaler, recipe_ty
     for key in data_real_driving.keys():
         # Apply the same scaling to the test data
         data_real_driving_X[key] = scaler.transform(data_real_driving_X[key])
+        data_real_driving_y[key] = target_scaler.transform(data_real_driving_y[key])
+        # Calculate R^2
         r2 = best_model.score(data_real_driving_X[key], data_real_driving_y[key])
         r2_values[key] = r2
         # print the R^2 value for each key
@@ -307,7 +364,7 @@ def test_model(best_model, best_model_name, data_real_driving, scaler, recipe_ty
         # print the shape of the predictions
         print(f"Shape of Predictions: {y_pred.shape}")
         # plot the predictions against the actual values
-        plot_figures(data_real_driving_y[key], y_pred, key, recipe_type)
+        plot_figures(data_real_driving_y[key], y_pred, key, recipe_type, target_scaler)
     # print all R^2 values
     print("R^2 Values:")
     print(r2_values)
@@ -315,12 +372,32 @@ def test_model(best_model, best_model_name, data_real_driving, scaler, recipe_ty
     print(f"Average R^2: {avg_r2}")
     return avg_r2
 
+def check_multicollinearity(data):
+    # Calculate the correlation matrix
+    corr_matrix = data.corr()
+    # Plot the heatmap
+    plt.figure(figsize=(16, 12))
+    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm')
+    plt.title("Correlation Matrix")
+    # Adjust layout to ensure nothing is cut off
+    plt.tight_layout()
+    plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.3)
+    # Save the figure to Data/Completed_Analysis
+    plt.savefig("Data/Completed_Analysis/Correlation_Matrix.png")
+    plt.close()  # Close the figure to free up memory and avoid overlay plots
+    return
 
 def main():
     # Load data
     data_constant_current, data_periodic, data_synthetic, data_real_driving = load_data()
     # Inspect dictionary keys
     inspect_all_data(data_constant_current, data_periodic, data_synthetic, data_real_driving)
+
+    # # remove discharge data outliers from all datasets
+    # data_constant_current = remove_outliers(data_constant_current)
+    # data_periodic = remove_outliers(data_periodic)
+    # data_synthetic = remove_outliers(data_synthetic)
+    # data_real_driving = remove_outliers(data_real_driving)
     
     # Create train and validation sets for cc, p, and s data
     data_train_val = {'cc': data_constant_current, 'p': data_periodic, 's': data_synthetic}
@@ -331,11 +408,11 @@ def main():
         # Create train and validation sets
         train_set_X, val_set_X, train_set_y, val_set_y, headers_x, headers_y = create_train_val_sets(data)
         # create linear, lasso, and ridge regression models - save R^2 values to a table
-        best_model, best_model_name, best_alpha, best_r2_val, scaler, coefficients_df = create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers_x, key)
+        best_model, best_model_name, best_alpha, best_r2_val, scaler, target_scaler, coefficients_df = create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers_x, key)
         # save the coefficients_df to a csv file to Data/Completed_Analysis
         coefficients_df.to_csv(f"Data/Completed_Analysis/{key}_coefficients.csv", index=False)
         # test the best model against the real driving data
-        avg_r2_test = test_model(best_model, best_model_name, data_real_driving, scaler, key)
+        avg_r2_test = test_model(best_model, best_model_name, data_real_driving, scaler, target_scaler, key)
         chosen_model[key] = {
             "Model": best_model_name,
             "Alpha": best_alpha,
