@@ -3,8 +3,6 @@ import pandas as pd
 import pickle
 import matplotlib.pyplot as plt
 from sklearn import linear_model
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import RobustScaler
 import seaborn as sns
 
@@ -58,38 +56,38 @@ def inspect_all_data(data_constant_current, data_periodic, data_synthetic, data_
     inspect_dictionary(data_real_driving)
     return
 
-# def remove_outliers(data):
-#     """Replace outliers from the data with data that fits the discharge profile. Some of the normalized 
-#     discharge capacities are greater than 2.0. These data should be replaced with a value that is the working 
-#     median of the 10 cycles before and after the cycle in question. In cases where the cycle is within the 
-#     first 10 cycles, the median of the 10 cycles after the cycle in question should be used. In cases where 
-#     the cycle is within the last 10 cycles, the median of the 10 cycles before the cycle in question should 
-#     be used. All other columns will perform the same computation at the identified cycle. In all cases, cycle 
-#     number should remain the same."""
+def remove_outliers(data):
+    """Replace outliers from the data with data that fits the discharge profile. Some of the normalized 
+    discharge capacities are greater than 2.0. These data should be replaced with a value that is the working 
+    median of the 10 cycles before and after the cycle in question. In cases where the cycle is within the 
+    first 10 cycles, the median of the 10 cycles after the cycle in question should be used. In cases where 
+    the cycle is within the last 10 cycles, the median of the 10 cycles before the cycle in question should 
+    be used. All other columns will perform the same computation at the identified cycle. In all cases, cycle 
+    number should remain the same."""
 
-#     new_data = {}
-#     for key in data.keys():
-#         # The target will contain Cycle and Normalized Discharge Capacity [-]
-#         # The features will contain Cycle with all other columns
-#         data_cycle = data[key]["Cycle"]
-#         data_other = data[key].drop(columns=["Cycle"])
-#         for i in range(10, len(data_other) - 10):
-#             if data_other.loc[i, "Normalized Discharge Capacity [-]"] > 2.0:
-#                 # perform the same computation at the identified cycle for all columns
-#                 for col in data_other.columns:
-#                     data_other.loc[i, col] = np.median(data_other.loc[i-10:i+10, col])
-#         for i in range(10):
-#             if data_other.loc[i, "Normalized Discharge Capacity [-]"] > 2.0:
-#                 for col in data_other.columns:
-#                     data_other.loc[i, col] = np.median(data_other.loc[i:i+10, col])
-#         for i in range(len(data_other) - 10, len(data_other)):
-#             if data_other.loc[i, "Normalized Discharge Capacity [-]"] > 2.0:
-#                 for col in data_other.columns:
-#                     data_other.loc[i, col] = np.median(data_other.loc[i-10:i, col])
-#         # add the cycle data back to the DataFrame
-#         new_data[key] = pd.concat([data_cycle, data_other], axis=1)
+    new_data = {}
+    for key in data.keys():
+        # The target will contain Cycle and Normalized Discharge Capacity [-]
+        # The features will contain Cycle with all other columns
+        data_cycle = data[key]["Cycle"]
+        data_other = data[key].drop(columns=["Cycle"])
+        for i in range(10, len(data_other) - 10):
+            if data_other.loc[i, "Normalized Discharge Capacity [-]"] > 2.0:
+                # perform the same computation at the identified cycle for all columns
+                for col in data_other.columns:
+                    data_other.loc[i, col] = np.median(data_other.loc[i-10:i+10, col])
+        for i in range(10):
+            if data_other.loc[i, "Normalized Discharge Capacity [-]"] > 2.0:
+                for col in data_other.columns:
+                    data_other.loc[i, col] = np.median(data_other.loc[i:i+10, col])
+        for i in range(len(data_other) - 10, len(data_other)):
+            if data_other.loc[i, "Normalized Discharge Capacity [-]"] > 2.0:
+                for col in data_other.columns:
+                    data_other.loc[i, col] = np.median(data_other.loc[i-10:i, col])
+        # add the cycle data back to the DataFrame
+        new_data[key] = pd.concat([data_cycle, data_other], axis=1)
         
-#     return new_data
+    return new_data
 
 
 def create_train_val_sets(data, seed=77):
@@ -186,7 +184,7 @@ def create_train_val_sets(data, seed=77):
     headers_x = avg_train_set_X.columns
     headers_y = avg_train_set_y.columns
 
-    return avg_train_set_X, avg_val_set_X, avg_train_set_y, avg_val_set_y, headers_x, headers_y
+    return avg_train_set_X, avg_val_set_X, avg_train_set_y, avg_val_set_y, headers_x
 
 def remove_before_char(s, char):
     # Split the string at the specified character
@@ -370,7 +368,7 @@ def test_model(best_model, best_model_name, data_real_driving, scaler, target_sc
     print(r2_values)
     avg_r2 = np.mean(list(r2_values.values()))
     print(f"Average R^2: {avg_r2}")
-    return avg_r2
+    return avg_r2, r2_values
 
 def check_multicollinearity(data):
     # Calculate the correlation matrix
@@ -393,11 +391,11 @@ def main():
     # Inspect dictionary keys
     inspect_all_data(data_constant_current, data_periodic, data_synthetic, data_real_driving)
 
-    # # remove discharge data outliers from all datasets
-    # data_constant_current = remove_outliers(data_constant_current)
-    # data_periodic = remove_outliers(data_periodic)
-    # data_synthetic = remove_outliers(data_synthetic)
-    # data_real_driving = remove_outliers(data_real_driving)
+    # remove discharge data outliers from all datasets
+    data_constant_current = remove_outliers(data_constant_current)
+    data_periodic = remove_outliers(data_periodic)
+    data_synthetic = remove_outliers(data_synthetic)
+    data_real_driving = remove_outliers(data_real_driving)
     
     # Create train and validation sets for cc, p, and s data
     data_train_val = {'cc': data_constant_current, 'p': data_periodic, 's': data_synthetic}
@@ -406,29 +404,36 @@ def main():
     
     for key, data in data_train_val.items():
         # Create train and validation sets
-        train_set_X, val_set_X, train_set_y, val_set_y, headers_x, headers_y = create_train_val_sets(data)
+        train_set_X, val_set_X, train_set_y, val_set_y, headers_x = create_train_val_sets(data)
         # create linear, lasso, and ridge regression models - save R^2 values to a table
         best_model, best_model_name, best_alpha, best_r2_val, scaler, target_scaler, coefficients_df = create_models(train_set_X, val_set_X, train_set_y, val_set_y, headers_x, key)
         # save the coefficients_df to a csv file to Data/Completed_Analysis
         coefficients_df.to_csv(f"Data/Completed_Analysis/{key}_coefficients.csv", index=False)
         # test the best model against the real driving data
-        avg_r2_test = test_model(best_model, best_model_name, data_real_driving, scaler, target_scaler, key)
+        avg_r2_test, r2_values = test_model(best_model, best_model_name, data_real_driving, scaler, target_scaler, key)
         chosen_model[key] = {
             "Model": best_model_name,
             "Alpha": best_alpha,
             "R^2 Validation": best_r2_val,
             "Avg R^2 Real Driving Test Set": avg_r2_test
         }
-    
+        # add the r2 values from the r2_values dictionary to the chosen_model dictionary
+        chosen_model[key].update(r2_values)  # Corrected line
+        
+
     # turn the chosen_model dictionary into a DataFrame
     chosen_model_df = pd.DataFrame.from_dict(chosen_model, orient='index').reset_index()
-    chosen_model_df.columns = ["Recipe Type", "Model", "Alpha", "R^2 Validation", "Avg R^2 Real Driving Test Set"]
-    
+    chosen_model_df.columns = ["Recipe Type", "Model", "Alpha", "R^2 Validation", "Avg R^2 Real Driving Test Set"] + [89 + int(i) for i in list(r2_values)]
+
     # save the chosen_model DataFrame to a csv file to Data/Completed_Analysis
     chosen_model_df.to_csv("Data/Completed_Analysis/chosen_model.csv", index=False)
     print(chosen_model_df)
-    return
 
+    """As a note: Upon inspection of the above data, ridge regression with an alpha value of 90 from the 
+    periodic data set should also be tested on the real driving data set. As a result, the above code will be 
+    repeated in a subsequent file."""
+    
+    return
 
 if __name__ == "__main__":
     main()
