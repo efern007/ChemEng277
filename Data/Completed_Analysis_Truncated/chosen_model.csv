@@ -1,0 +1,2 @@
+Recipe Type,Model,Alpha,R^2 Validation,Avg R^2 Real Driving Test Set
+cc,lasso_0.1,0.1,0.9992265982782444,-544232339582236.1
