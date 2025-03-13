@@ -3,6 +3,12 @@ import pandas as pd
 import numpy as np
 import pickle
 
+"""This script imports the raw data and aging data for battery degradation experiments, processes the raw data, and separates the 
+dataframes into the four recipe types. The raw data is compressed to the independent portion of a cycle and the processed data is 
+compressed to the cycle level. The aging data is then merged with the processed data to create a new dataframe that contains all 
+the processed data and aging data at the cycle level. The dataframes are then separated into the four recipe types: constant current, 
+periodic, synthetic, and real driving. The dataframes are saved to a pickle file."""
+
 def files_align(directory1, directory2):
     """This function checks if the files in two directories have the same final 3 
     character suffixes. Note: all files in the directories must be .csv files."""
@@ -54,30 +60,42 @@ def import_files(directory, file_prefix, no_files, nrows=None):
         # Read the file with the specified number of rows
         df_temp = pd.read_csv(file_path, dtype=dtype_dict, low_memory=False, nrows=nrows)
         df_list.append(df_temp)
+
+    # print the structure of the first dataframe    
     print("Raw data imported.")
+
     # print structure of first dataframe
     print(df_list[0].head())
+
     # print structure of dataframes
     # print(df_list[0].info())
+
     # print structure of df_list
     print(f"Number of files in dataframe = {len(df_list)}.")
-    """
-    Note that there are only 92 files as the print statement shows above. 
+
+    """ Note that there are only 92 files as the print statement shows above. 
     This is because the following files are missing: 000, 001, 002, 018, 083.
 
     This will be accounted for later in the code when separating the dataframes 
-    into the four recipe types.
-    """
+    into the four recipe types."""
+
     return df_list
 
 def compress_raw_data(raw_list):
-    """This function compresses the raw data at each cycle and enters the results as new columns in the processed data"""  
+    """This function compresses the raw data at each independent portion of a cycle and enters the results as new columns 
+    in the processed data. The raw data comprises of cycles that have steps and some of these steps are repeated with later
+    cycles and/or looped within a given cycle. As such, a combination of all three variables equates an independent portion 
+    of a cycle. All raw data was compressed to this level in order to extract key variables, such as rest time, charge time,
+    discharge time, total capacity, average current, and maximum voltage, for each independent portion of a cycle."""
+
+    # create a list to store the processed dataframes  
     df_list = []
     # raw list and processed list have the same number of dataframes
     for i in range(len(raw_list)):
-        print(i)
+
+        print(f"file {i} being processed")
         raw_init = raw_list[i]
-        # only keep rows where State is 'R', 'C', or 'D'
+        # only keep rows where State is 'R', 'C', or 'D' as these are the only states of interest
         raw = raw_init[raw_init['State'].isin(['R', 'C', 'D'])].copy()
         # concatenate "Cyc#", "Full Step #" and "Loop3" to create a new column "Full Step #"
         raw.loc[:, 'Full Step #'] = raw['Cyc#'].astype(str) + "--" + raw['Full Step #'] + "--" + raw['Loop3'].astype(str)
@@ -103,10 +121,15 @@ def compress_raw_data(raw_list):
     # print the structure of the processed dataframe
     print(df_list[0].head())
     print(f'Processed Data has {len(df_list[0])} entries.')
+
     return df_list
 
 def compress_to_cycle(processed_list, aging_list):
-    """This function compresses the processed data to the cycle level and merges the aging data"""
+    """This function compresses the processed data to the cycle level and merges the aging data. Although the processed data
+    was compressed to the independent portion of a cycle, the aging data is at the cycle level. As such, the processed data
+    was compressed to the cycle level in order to merge the aging data. The aging data was then merged with the processed data
+    to create a new dataframe that contains all the processed data and aging data at the cycle level."""
+
     # create a list to store the processed dataframes
     df_list = []
     # processed list and aging list have the same number of dataframes
@@ -146,43 +169,6 @@ def compress_to_cycle(processed_list, aging_list):
         max_voltage = max_voltage.reindex(all_cycles, fill_value=0)
 
         # create a dataframe to store the processed data
-        # print(f'Index = {i}')
-        # processed = processed_list[i]
-        # aging = aging_list[i]
-        # # make various calculations on the processed data at each cycle
-        # # calculate the total time for each cycle
-        # total_time = processed.groupby('Cycle')['Max Step (hrs)'].sum()
-        # # calculate the rest time 'R' for each cycle
-        # rest_time = processed[processed['State'] == 'R'].groupby('Cycle')['Max Step (hrs)'].sum()
-        # # calculate the fraction of rest time for each cycle
-        # rest_fraction = rest_time / total_time
-        # # calculate the charge time 'C' for each cycle
-        # charge_time = processed[processed['State'] == 'C'].groupby('Cycle')['Max Step (hrs)'].sum()
-        # # calculate the fraction of charge time for each cycle
-        # charge_fraction = charge_time / total_time
-        # # calculate the discharge time 'D' for each cycle
-        # discharge_time = processed[processed['State'] == 'D'].groupby('Cycle')['Max Step (hrs)'].sum()
-        # # calculate the fraction of discharge time for each cycle
-        # discharge_fraction = discharge_time / total_time
-        # # calculate the total capacity for each cycle
-        # total_capacity = processed.groupby('Cycle')['Max Capacity'].sum()
-        # # calculate the average current for each cycle
-        # avg_current = total_capacity / total_time
-        # # calculate the max voltage for each cycle
-        # max_voltage = processed.groupby('Cycle')['Max Voltage'].max()
-        # # Ensure all Series have the same index
-        # all_cycles = total_time.index
-        # rest_time = rest_time.reindex(all_cycles, fill_value=0)
-        # rest_fraction = rest_fraction.reindex(all_cycles, fill_value=0)
-        # charge_time = charge_time.reindex(all_cycles, fill_value=0)
-        # charge_fraction = charge_fraction.reindex(all_cycles, fill_value=0)
-        # discharge_time = discharge_time.reindex(all_cycles, fill_value=0)
-        # discharge_fraction = discharge_fraction.reindex(all_cycles, fill_value=0)
-        # total_capacity = total_capacity.reindex(all_cycles, fill_value=0)
-        # avg_current = avg_current.reindex(all_cycles, fill_value=0)
-        # max_voltage = max_voltage.reindex(all_cycles, fill_value=0)
-
-        # create a dataframe to store the processed data
         df_temp1 = pd.DataFrame({'Cycle': total_time.index,
                                 'Total Time (hrs)': total_time.values,
                                 'Rest Time (hrs)': rest_time.values,
@@ -202,24 +188,24 @@ def compress_to_cycle(processed_list, aging_list):
         # remove rows in the aging data that are not in the processed data
         aging = aging[aging['Cycle'].isin(df_temp1['Cycle'])]
         print(f'After removing excess rows, there are {len(aging)} rows of aging data.')
-
         # merge the aging data with the processed data
         df_temp2 = pd.merge(aging, df_temp1, on='Cycle', how='left')
         df_list.append(df_temp2)
+
     # print the structure of the processed dataframe
     print(df_list[0].head())
+
     return df_list
 
 def separate_dataframes(df_list):
-    """This function separates the dataframes into the four recipe types
-    and returns the four separated dataframes. Note that because runs 000, 
-    001, 002, 018, and 083 are missing, the dataframes indexes will be off by
-    a corresponding amount. Note: from Publishing_data_protocol_mapping_dic.json,
-    the recipe types are as follows:
+    """This function separates the dataframes into the four recipe types and returns the four separated dataframes. 
+    Note that because runs 000, 001, 002, 018, and 083 are missing, the dataframes indexes will be off by
+    a corresponding amount. Note: from Publishing_data_protocol_mapping_dic.json, the recipe types are as follows:
     Constant Current: run 3-24, 55, 56 => index 0-20, 51, 52
     Periodic: run 25-54 => index 21-50
     Synthetic: run 57-88 => index 53-83
     Real Driving: run 89-96 => index 84-91"""
+
     # initialize the four new arrays
     df_constant_current = {}
     df_periodic = {}
@@ -251,6 +237,7 @@ def separate_dataframes(df_list):
             # add the dataframe to the real driving dataframe
             df_real_driving[f'{count4}'] = df
             count4 += 1
+
     # print the structure of the four dataframes
     print(f'Constant Current Dataframes: {df_constant_current.keys()}')
     print(f'Periodic Dataframes: {df_periodic.keys()}')
@@ -260,6 +247,7 @@ def separate_dataframes(df_list):
     print(f'Periodic Dataframes Length: {count2}')
     print(f'Synthetic Dataframes Length: {count3}')
     print(f'Real Driving Dataframes Length: {count4}')
+
     return df_constant_current, df_periodic, df_synthetic, df_real_driving
 
 def main():
@@ -270,7 +258,7 @@ def main():
     file_prefix_raw = "Publishing_data_raw_data_cell_"
     no_files = 96
     # NOTE: import raw data with first 10,000 rows for testing, run with nrows=None for full data
-    raw_list = import_files(directory_raw, file_prefix_raw, no_files, nrows=None)
+    raw_list = import_files(directory_raw, file_prefix_raw, no_files, nrows=10000)
     # Aging Processing
     directory_aging = "Data/AgingData/"
     file_prefix_aging = "Publishing_data_aging_summary_cell_"

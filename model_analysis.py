@@ -13,7 +13,7 @@ Once random keys are determined for each dataset, those keys will be averaged to
 versus cycle number. The same method will be used for the validation set. The target variable matrix will be
 2D with SOH vs cycle number. These models will be fitted to Linear, Lasso, and Ridge Regression. Lasso Regression 
 will be tested for various alpha (lambda) hyperparameters [0.1, 0.25, 0.5, 0.75, 0.9]. Ridge Regression will be
-tested for various alpha hyperparameters [1, 2.5, 5, 7.5, 9]. The Linear Regression model will be tested as is.
+tested for various alpha hyperparameters [10, 25, 50, 75, 90]. The Linear Regression model will be tested as is.
 For both the train and validation sets, the R^2 value will be calculated for each model. The model with the
 highest R^2 value will be selected to proceed to the test set. Because of potential variability in the train/validation
 split, a series of random combinations of train/validation sets will be tested. The model with the highest average
@@ -66,22 +66,23 @@ def remove_outliers(data):
     number should remain the same."""
 
     new_data = {}
+    THRESHOLD = 2.0
     for key in data.keys():
         # The target will contain Cycle and Normalized Discharge Capacity [-]
         # The features will contain Cycle with all other columns
         data_cycle = data[key]["Cycle"]
         data_other = data[key].drop(columns=["Cycle"])
         for i in range(10, len(data_other) - 10):
-            if data_other.loc[i, "Normalized Discharge Capacity [-]"] > 2.0:
+            if data_other.loc[i, "Normalized Discharge Capacity [-]"] > THRESHOLD:
                 # perform the same computation at the identified cycle for all columns
                 for col in data_other.columns:
                     data_other.loc[i, col] = np.median(data_other.loc[i-10:i+10, col])
         for i in range(10):
-            if data_other.loc[i, "Normalized Discharge Capacity [-]"] > 2.0:
+            if data_other.loc[i, "Normalized Discharge Capacity [-]"] > THRESHOLD:
                 for col in data_other.columns:
                     data_other.loc[i, col] = np.median(data_other.loc[i:i+10, col])
         for i in range(len(data_other) - 10, len(data_other)):
-            if data_other.loc[i, "Normalized Discharge Capacity [-]"] > 2.0:
+            if data_other.loc[i, "Normalized Discharge Capacity [-]"] > THRESHOLD:
                 for col in data_other.columns:
                     data_other.loc[i, col] = np.median(data_other.loc[i-10:i, col])
         # add the cycle data back to the DataFrame
@@ -432,7 +433,7 @@ def main():
     """As a note: Upon inspection of the above data, ridge regression with an alpha value of 90 from the 
     periodic data set should also be tested on the real driving data set. As a result, the above code will be 
     repeated in a subsequent file."""
-    
+
     return
 
 if __name__ == "__main__":
